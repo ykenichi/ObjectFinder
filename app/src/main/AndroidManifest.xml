@@ -9,7 +9,7 @@
         android:theme="@android:style/Theme.NoTitleBar.Fullscreen" >
 
         <activity android:name=".ObjectFinderActivity"
-                  android:label="Feature Extraction Camera"
+                  android:label="Object Finder Camera"
                   android:screenOrientation="landscape"
                   android:configChanges="keyboardHidden|orientation">
             <intent-filter>
@@ -28,10 +28,13 @@
     <uses-sdk android:minSdkVersion="8" />
 
     <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.VIBRATE"/>
 
     <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false"/>
     <uses-feature android:name="android.hardware.camera.front" android:required="false"/>
     <uses-feature android:name="android.hardware.camera.front.autofocus" android:required="false"/>
+
+
 
 </manifest>
