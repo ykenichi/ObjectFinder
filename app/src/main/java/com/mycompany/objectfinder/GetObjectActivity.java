@@ -76,6 +76,7 @@ public class GetObjectActivity extends Activity {
                     Paint paint = new Paint();
                     paint.setAntiAlias(true);
                     paint.setColor(Color.RED);
+                    paint.setStrokeWidth(3);
                     paint.setStyle(Paint.Style.STROKE);
                     Canvas canvas = new Canvas(modifiedBitmap);
                     Log.i(TAG, "Tapped Coords: x=" + temp[0] + " y=" + temp[1]);

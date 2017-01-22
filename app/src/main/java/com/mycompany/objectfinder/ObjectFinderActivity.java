@@ -270,6 +270,8 @@ public class ObjectFinderActivity extends Activity implements CvCameraViewListen
             }
             Log.i(TAG, "Getting keypoints & descriptors of new template...");
             vib.vibrate(250);
+            if(template != null)
+                template.release();
             if(bFrameOrRegion) {    //Loads ROI, crops the frame based on roi
                 Mat scene = loadMatFromImage();
                 if(scene == null) {
@@ -354,6 +356,12 @@ public class ObjectFinderActivity extends Activity implements CvCameraViewListen
     four corners of the match, which is drawn to the frame and displayed.
      */
     public Mat onCameraFrame(CvCameraViewFrame inputFrame) {
+        if(gray != null && rgb != null && clean != null){
+            gray.release();
+            rgb.release();
+            clean.release();
+        }
+
         gray = inputFrame.gray().clone();
         rgb = inputFrame.rgba().clone();
         clean = inputFrame.rgba().clone();
