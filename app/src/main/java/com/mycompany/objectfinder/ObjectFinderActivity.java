@@ -16,10 +16,10 @@ import org.opencv.core.MatOfDMatch;
 import org.opencv.core.MatOfKeyPoint;
 import org.opencv.core.MatOfPoint2f;
 import org.opencv.core.Point;
+import org.opencv.core.Rect;
 import org.opencv.core.Scalar;
 import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.CameraBridgeViewBase.CvCameraViewListener2;
-import org.opencv.core.Size;
 import org.opencv.features2d.DescriptorExtractor;
 import org.opencv.features2d.DescriptorMatcher;
 import org.opencv.features2d.FeatureDetector;
@@ -28,18 +28,21 @@ import org.opencv.imgproc.Imgproc;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.os.Bundle;
 import android.os.Vibrator;
 import android.util.Log;
-import android.view.Menu;
-import android.view.MenuItem;
 import android.view.View;
-import android.view.Window;
 import android.view.WindowManager;
 import android.widget.Toast;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -47,40 +50,29 @@ import java.util.LinkedList;
 import java.util.List;
 
 public class ObjectFinderActivity extends Activity implements CvCameraViewListener2 {
-    private static final String  TAG                 = "ObjectFinderActivity";
+    private static final String TAG = "ObjectFinderActivity";
+    private static final int REQUEST_VAL = 123456;
 
-    public static final int      FE_ORB      = 0;
-    public static final int      FE_FAST      = 1;
-    public static final int      FE_BRISK     = 2;
-    public static final int      FE_GFTT     = 3;
-    public static final int      FE_HARRIS     = 4;
-
-    private MenuItem             mItemPreviewORB;
-    private MenuItem             mItemPreviewFAST;
-    private MenuItem             mItemPreviewBRISK;
-    private MenuItem             mItemPreviewGFTT;
-    private MenuItem             mItemPreviewHARRIS;
     private CameraBridgeViewBase mOpenCvCameraView;
     private Vibrator vib;
 
-
-    private Mat                  mIntermediateMat;
-    private Mat gray = null;
-    private Mat rgb = null;
+    private Mat gray    = null;
+    private Mat rgb     = null;
+    private Mat clean   = null;
     private FeatureDetector featuredetector;
 
-    private DescriptorMatcher descriptorMatcher;
+    private DescriptorMatcher   descriptorMatcher;
     private DescriptorExtractor descriptorExtractor;
+    private Rect roi;
     private Mat template;
     private Mat templateDescriptors;
     private MatOfKeyPoint templateKeypoints;
-    private int multiplier = 2;
-    private int numMatches = 50;
+    private int thresh = 50;
     private boolean bIsTemplateLoaded = false;
     private boolean bFrameReady = false;
     private boolean bCalledBefore = false;
-
-    public static int           viewMode = FE_ORB;
+    private boolean bEnableMatching = true;
+    private boolean bFrameOrRegion = false;
 
     /*
     This function is called when the opencv camera is launched
@@ -114,17 +106,51 @@ public class ObjectFinderActivity extends Activity implements CvCameraViewListen
         super.onCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
-        setContentView(com.mycompany.objectfinder.R.layout.activity_feature_extraction);
+        setContentView(com.mycompany.objectfinder.R.layout.activity_object_finder);
         vib = (Vibrator) this.getSystemService(Context.VIBRATOR_SERVICE);
 
         mOpenCvCameraView = (CameraBridgeViewBase) findViewById(R.id.object_finder_activity_surface_view);
         mOpenCvCameraView.setCvCameraViewListener(this);
-        mOpenCvCameraView.setOnClickListener(new View.OnClickListener() {
-            public void onClick(View v) {   // Called when user taps on screen
-                grabFrame();
+        // Set a listener to check for a long press (>1 second when finger is on screen)
+        mOpenCvCameraView.setOnLongClickListener(new View.OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View view) {
+                if (bEnableMatching) {  //Toggles the image matching computation on/off
+                    bEnableMatching = false;
+                    Toast.makeText(ObjectFinderActivity.this,
+                            "Matching turned off", Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(ObjectFinderActivity.this,
+                            "Matching turned on", Toast.LENGTH_SHORT).show();
+                    bEnableMatching = true;
+                }
+                return true;
             }
         });
-        //mOpenCvCameraView.setMaxFrameSize(1280,720);
+        //Sets frame size to be this maximum, this may need to be adjusted depending on the device,
+        //since each device has its own list of pre-defined supported frame sizes
+        mOpenCvCameraView.setMaxFrameSize(1280, 720);
+    }
+
+    /*
+    This function is automatically called upon the return to this activity after the second activity called
+    via startActivityForResult() finishes, or the user presses the back button. It checks to see
+    whether the ROI was successfully captured. If it is, sets the ROI and calls grabFrame().
+     */
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        Log.i(TAG, "Returned from intent");
+
+        if(requestCode == REQUEST_VAL && resultCode == RESULT_OK) {
+            Log.i(TAG, "Checking data from GetObjectActivity...");
+            int topleft[] = data.getExtras().getIntArray("Point");
+            int width = data.getExtras().getInt("Width");
+            int height = data.getExtras().getInt("Height");
+            roi = new Rect(topleft[0],topleft[1],width,height);
+            bFrameOrRegion = true;
+            grabFrame(null);
+        }
     }
 
     @Override
@@ -155,23 +181,85 @@ public class ObjectFinderActivity extends Activity implements CvCameraViewListen
     }
 
     public void onCameraViewStarted(int width, int height) {
-
     }
 
     public void onCameraViewStopped() {
         // Explicitly deallocate Mats
-        if (mIntermediateMat != null)
-            mIntermediateMat.release();
+        if (gray != null)
+            gray.release();
+        if (rgb != null)
+            rgb.release();
+        if(clean != null)
+            clean.release();
 
-        mIntermediateMat = null;
+        gray = null;
+        rgb = null;
+        clean = null;
     }
 
     /*
-    Called when screen is tapped, grabs the latest frame taken from the camera and uses that as a
-    template for future matches by extracting its features and descriptors.
+    Saves the latest unmodified frame from the camera to a bitmap file, then starts another activity
+    to begin the region selection
      */
-    public void grabFrame(){
+    public void sendFrame(View view){
+        Intent intent = new Intent(ObjectFinderActivity.this, GetObjectActivity.class);
+        Bitmap bmp = Bitmap.createBitmap(clean.cols(), clean.rows(), Bitmap.Config.ARGB_8888);
+        Utils.matToBitmap(clean, bmp);
+        String filename = createImageFromBitmap(bmp);
+        if(filename == null) {
+            Log.e(TAG, "ERROR: Could not write bitmap to file");
+            return;
+        }
+        startActivityForResult(intent, REQUEST_VAL);
+    }
+
+    /*
+    Saves a bitmap image to a file. This allows other activities to use the image without passing the
+    image via an Intent (Intents have a limit of 1MB of data that can be sent, so sending bitmaps
+    is impractical).
+     */
+    public String createImageFromBitmap(Bitmap bitmap) {
+        String fileName = "tempFrame";//no .png or .jpg needed
+        try {
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            bitmap.compress(Bitmap.CompressFormat.JPEG, 100, bytes);
+            FileOutputStream fo = openFileOutput("tempFrame", Context.MODE_PRIVATE);
+            fo.write(bytes.toByteArray());
+            // remember close file output
+            fo.close();
+        } catch (Exception e) {
+            e.printStackTrace();
+            fileName = null;
+        }
+        return fileName;
+    }
+
+    /*
+    Returns a Mat object from a decoded bitmap saved on the device
+     */
+    public Mat loadMatFromImage() {
+        Mat frame = new Mat();
+        try {
+            // Opens bitmap file and puts it into bitmap object, then convert to Mat
+            Bitmap bmp = BitmapFactory.decodeStream(this.openFileInput("tempFrame"));
+            Utils.bitmapToMat(bmp, frame);
+
+        } catch(Exception e){
+            e.printStackTrace();
+            frame = null;
+        }
+        return frame;
+    }
+
+    /*
+    Grabs the latest frame taken from the camera and uses it or a section of the frame as a template
+    for future matches by extracting its features and descriptors.
+     */
+    public void grabFrame(View view){
         bIsTemplateLoaded = false;
+        if(view != null && view.getTag().toString().equals("1"))    //Check tag to see if grabFrame is called from a button
+            bFrameOrRegion = false;
+
         if(bFrameReady) {   //Only executes the function if there is an available frame
             //Clears the previous template features to avoid a crash that may occur
             //when indexing the kp array of a previous template with less features (out of bounds array index)
@@ -182,21 +270,31 @@ public class ObjectFinderActivity extends Activity implements CvCameraViewListen
             }
             Log.i(TAG, "Getting keypoints & descriptors of new template...");
             vib.vibrate(250);
-            template = gray;
+            if(bFrameOrRegion) {    //Loads ROI, crops the frame based on roi
+                Mat scene = loadMatFromImage();
+                if(scene == null) {
+                    Log.e(TAG, "ERROR: Could not load mat from file");
+                    return;
+                }
+                template = new Mat(scene, roi);
+            }
+            else    //Simply clone the grayscale frame and use it as a template
+                template = gray.clone();
+
             templateKeypoints = new MatOfKeyPoint();
             featuredetector = FeatureDetector.create(FeatureDetector.ORB);
+            descriptorExtractor = DescriptorExtractor.create(DescriptorExtractor.ORB);
             featuredetector.detect(template, templateKeypoints);
 
-            if(templateKeypoints.rows() > 100) {
+            if(templateKeypoints.rows() >= 100) {   //Extract descriptors
                 Toast.makeText(ObjectFinderActivity.this,
                         "Matching tapped frame to new frames", Toast.LENGTH_LONG).show();
                 templateDescriptors = new Mat();
-                descriptorExtractor = DescriptorExtractor.create(DescriptorExtractor.ORB);
                 descriptorExtractor.compute(template, templateKeypoints, templateDescriptors);
                 bIsTemplateLoaded = true;
                 bCalledBefore = true;
             }
-            else {  //If there is too little features (<=100), it does not do matching
+            else {  //If there is too little features (<100), it does not do matching
                 Toast.makeText(ObjectFinderActivity.this,
                         "ERROR: Not enough features", Toast.LENGTH_LONG).show();
                 bIsTemplateLoaded = false;
@@ -205,10 +303,33 @@ public class ObjectFinderActivity extends Activity implements CvCameraViewListen
     }
 
     /*
-    Sorts all of the matches based on its distance, from smallest distance to largest.
-    Then, takes the top N (where N = numMatches).
+    Sorts all of the keypoints based on its response, from largest response to smallest.
+    Then, takes the top 3*N (where N = thresh). The lower this number, the faster the framerate
+    but lower the accuracy and vice-versa (slight improvement, not worth reduction in accuracy).
      */
-    private List<DMatch> filterMatchesv2(MatOfDMatch allMatches){
+    private MatOfKeyPoint filterKP(MatOfKeyPoint keypoints){
+
+        List<KeyPoint> listOfKeypoints = keypoints.toList();
+
+        Collections.sort(listOfKeypoints, new Comparator<KeyPoint>() {
+            @Override
+            public int compare(KeyPoint kp1, KeyPoint kp2) {
+                // Sort them in descending order, so the best response KPs will come first
+                return (int) (kp2.response - kp1.response);
+            }
+        });
+        if(listOfKeypoints.size()>3*thresh)
+            listOfKeypoints = listOfKeypoints.subList(0,3*thresh);
+        MatOfKeyPoint sortedKP = new MatOfKeyPoint();
+        sortedKP.fromList(listOfKeypoints);
+        return sortedKP;
+    }
+
+    /*
+    Sorts all of the matches based on its distance, from smallest distance to largest.
+    Then, takes the top N (where N = thresh).
+     */
+    private List<DMatch> filterMatches(MatOfDMatch allMatches){
 
         List<DMatch> allMatchesList = allMatches.toList();
 
@@ -222,39 +343,9 @@ public class ObjectFinderActivity extends Activity implements CvCameraViewListen
                 return 0;
             }
         });
-        if(allMatchesList.size()>numMatches)
-            allMatchesList = allMatchesList.subList(0,numMatches);
+        if(allMatchesList.size()>thresh)
+            allMatchesList = allMatchesList.subList(0,thresh);
         return allMatchesList;
-    }
-
-    /*
-    ****NOTE: Depreciated****
-    Filters out any matches with a distance that is greater than the threshold
-    Threshold is determined by the minimum distance of the match list * the multiplier
-     */
-    private List<DMatch> filterMatches(MatOfDMatch allMatches) {
-
-        List<DMatch> allMatchesList = allMatches.toList();
-
-        double maxDist = 0; double minDist = 9999;
-
-        for(int i = 0; i < allMatchesList.size(); i++) {
-            double dist = allMatchesList.get(i).distance;
-            if(dist < minDist)  minDist = dist;
-            if(dist > maxDist)  maxDist = dist;
-        }
-
-        double threshold = multiplier * minDist;
-        List<DMatch> goodMatchesList = new ArrayList<>();
-        for(int i = 0; i < allMatchesList.size(); i++) {
-            if(allMatchesList.get(i).distance <= threshold)
-                goodMatchesList.add(allMatchesList.get(i));
-        }
-
-        //MatOfDMatch goodMatches = new MatOfDMatch();
-        //goodMatches.fromList(goodMatchesList);
-        //return goodMatches;
-        return goodMatchesList;
     }
 
     /*
@@ -263,20 +354,20 @@ public class ObjectFinderActivity extends Activity implements CvCameraViewListen
     four corners of the match, which is drawn to the frame and displayed.
      */
     public Mat onCameraFrame(CvCameraViewFrame inputFrame) {
-        gray = inputFrame.gray();
-        rgb = inputFrame.rgba();
+        gray = inputFrame.gray().clone();
+        rgb = inputFrame.rgba().clone();
+        clean = inputFrame.rgba().clone();
 
         Imgproc.cvtColor(rgb, rgb, Imgproc.COLOR_RGBA2RGB);
-        if(bIsTemplateLoaded) { // Does not perform any computation unless a frame is tapped by the user
-
-            featuredetector = FeatureDetector.create(FeatureDetector.ORB);
-            descriptorExtractor = DescriptorExtractor.create(DescriptorExtractor.ORB);
+        if(bIsTemplateLoaded && bEnableMatching) { // Does not perform any computation unless a frame is tapped by the user
             descriptorMatcher = DescriptorMatcher.create(DescriptorMatcher.BRUTEFORCE_HAMMING);
 
             // Extract keypoints and draws them to the output frame
             MatOfKeyPoint keypoints = new MatOfKeyPoint();
             featuredetector.detect(gray, keypoints);
 
+            //Uncomment this line if you want to improve the framerate (Reduces accuracy)
+            //keypoints = filterKP(keypoints);
 
             if (keypoints.rows() < 4)   // Minimum of 4 features needed, return if criterion is not met
                 return rgb;
@@ -297,9 +388,9 @@ public class ObjectFinderActivity extends Activity implements CvCameraViewListen
             // Matches current frame's descriptors to template's
             descriptorMatcher.match(descriptors, templateDescriptors, matches);
 
-            // Filters matches
+            // Filters matches by taking the top [thresh] matches and putting them into a list
             List<DMatch> goodMatchesList = new ArrayList<>();
-            goodMatchesList = filterMatchesv2(matches);
+            goodMatchesList = filterMatches(matches);
 
             // Iterate through good matches and put the 2D points of the object (template) and frame (scene) into a list
             List<KeyPoint> objKpList = new ArrayList<>();
@@ -313,10 +404,6 @@ public class ObjectFinderActivity extends Activity implements CvCameraViewListen
                 sceneList.addLast(sceneKpList.get(goodMatchesList.get(i).queryIdx).pt);
             }
 
-            // Draws some information to the frame
-            String result_str = "Total Features: " + keypoints.rows() + "   Total Matches: " + matches.rows() + "   Good Matches: " + goodMatchesList.size();
-            Imgproc.putText(rgb, result_str, new Point(30, rgb.rows() - 30), Core.FONT_HERSHEY_COMPLEX, 1.5, new Scalar(255, 0, 0), 2, 8, false);
-
             MatOfPoint2f obj = new MatOfPoint2f();
             MatOfPoint2f scene = new MatOfPoint2f();
 
@@ -325,10 +412,30 @@ public class ObjectFinderActivity extends Activity implements CvCameraViewListen
 
             // Calculate the homography
             Mat mask = new Mat();
-            //Mat H = Calib3d.findHomography(obj, scene, Calib3d.RANSAC, 3, mask, 2000, 0.995);
-            Mat H = Calib3d.findHomography(obj, scene, Calib3d.RANSAC, 5);
+            Mat H = Calib3d.findHomography(obj, scene, Calib3d.RANSAC, 5, mask, 2000, 0.995);
+            //Mat H = Calib3d.findHomography(obj, scene, Calib3d.RANSAC, 5);
             Mat objCorners = new Mat(4, 1, CvType.CV_32FC2);
             Mat sceneCorners = new Mat(4, 1, CvType.CV_32FC2);
+            int numInliers = 0;
+            for(int i = 0; i < mask.rows(); i++){
+                double value[] = mask.get(i,0);
+                if((int)value[0] == 1)
+                    numInliers++;
+            }
+            /*
+            double[] a = mask.get(0,0);
+            Log.i(TAG, "Length: " + a.length);
+            for(int i = 0; i < a.length; i++)
+            Log.i(TAG, "Value: " + a[i]);*/
+
+            // Draws some information to the frame
+            String result_str1 = "Keypoints: " + keypoints.rows();
+            String result_str2 = "Matches: " + goodMatchesList.size();
+            String result_str3 = "Inliers: " + numInliers;
+            Imgproc.putText(rgb, result_str1, new Point(20, rgb.rows() - 100), Core.FONT_HERSHEY_COMPLEX, 1, new Scalar(255, 0, 0), 2, 8, false);
+            Imgproc.putText(rgb, result_str2, new Point(20, rgb.rows() - 60), Core.FONT_HERSHEY_COMPLEX, 1, new Scalar(255, 0, 0), 2, 8, false);
+            Imgproc.putText(rgb, result_str3, new Point(20, rgb.rows() - 20), Core.FONT_HERSHEY_COMPLEX, 1, new Scalar(255, 0, 0), 2, 8, false);
+
 
             // Initializes the four corners of the object (template)
             objCorners.put(0, 0, new double[]{0, 0});
