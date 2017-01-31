@@ -14,8 +14,67 @@
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:background="#77000000"
+        android:gravity="end"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentRight="true"
+        android:orientation="vertical">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#FF0000"
+            android:text="@string/templateTxt"
+            android:id="@+id/object_finder_activity_template" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#00FF00"
+            android:text="@string/skipvalueTxt"
+            android:id="@+id/object_finder_activity_frameskip" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="#FFFF00"
+            android:text="@string/matchTxt"
+            android:id="@+id/object_finder_activity_match" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="120dp"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:layout_alignParentLeft="true"
+        android:alpha="0.50"
+        android:orientation="vertical">
+        <Button
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:text="@string/saveListTxt"
+            android:tag="3"
+            android:onClick="saveDialog"
+            android:id="@+id/object_finder_activity_saveListButton" />
+        <Button
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:text="@string/loadListTxt"
+            android:tag="4"
+            android:onClick="showList"
+            android:id="@+id/object_finder_activity_loadListButton" />
+        <Button
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:text="@string/frameskipTxt"
+            android:tag="5"
+            android:onClick="frameskipDialog"
+            android:id="@+id/object_finder_activity_frameskipButton" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="120dp"
+        android:layout_height="wrap_content"
         android:layout_alignParentBottom="true"
         android:layout_alignParentRight="true"
+        android:alpha="0.50"
         android:orientation="vertical">
         <Button
             android:layout_width="match_parent"

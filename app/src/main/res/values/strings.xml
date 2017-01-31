@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">OCV Image Manipulations</string>
+    <string name="saveListTxt">Save Template</string>
+    <string name="loadListTxt">Load Template</string>
     <string name="getFrameTxt">Select Frame</string>
     <string name="getRegionTxt">Select Region</string>
     <string name="clearTxt">Clear</string>
@@ -9,4 +11,8 @@
     <string name="helpTxt1">Please select a corner of the region</string>
     <string name="helpTxt2">Please select the opposite corner of the region</string>
     <string name="helpTxt3">Press finish to go back. Press clear to set a new region.</string>
+    <string name="templateTxt">No template loaded</string>
+    <string name="matchTxt">Matching: ON</string>
+    <string name="frameskipTxt">Frameskip</string>
+    <string name="skipvalueTxt">Frameskip: None</string>
 </resources>

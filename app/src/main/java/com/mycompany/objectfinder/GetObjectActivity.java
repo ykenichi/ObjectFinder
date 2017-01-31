@@ -1,6 +1,8 @@
 package com.mycompany.objectfinder;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -10,10 +12,12 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.os.Bundle;
+import android.text.InputType;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewTreeObserver;
+import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -40,6 +44,7 @@ public class GetObjectActivity extends Activity {
     private float p2[] = {0, 0};
     private int state = 0;
     private boolean isValid = false;
+    private String dialogTxt;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -130,6 +135,7 @@ public class GetObjectActivity extends Activity {
     public void returnResult(View view){
         Intent intent = new Intent();
         if(isValid) {
+
             int topLeft[] = {(int)Math.min(p1[0], p2[0]), (int)Math.min(p1[1], p2[1])};
             intent.putExtra("Point", topLeft);
             intent.putExtra("Width", width);

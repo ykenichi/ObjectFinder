@@ -4,7 +4,7 @@
     android:versionCode="21"
     android:versionName="2.1">
 
-    <uses-sdk android:minSdkVersion="8" />
+    <uses-sdk android:minSdkVersion="11" />
 
     <supports-screens
         android:anyDensity="true"
